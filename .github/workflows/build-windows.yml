@@ -1,0 +1,130 @@
+name: Build Windows Executable
+
+on:
+  workflow_dispatch:  # Manual trigger
+  push:
+    tags:
+      - 'v*'  # Optional: trigger on version tags
+
+permissions:
+  contents: write  # Required for uploading to releases
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v6
+
+    - name: Create virtual environment and install dependencies
+      run: |
+        uv venv
+        uv sync --all-extras
+
+    - name: Build executable with PyInstaller
+      run: |
+        .venv\Scripts\activate
+        pyinstaller --name trae-cli `
+          --onefile `
+          --hidden-import=jsonpath_ng `
+          --hidden-import=jsonpath_ng.ext `
+          --hidden-import=tree_sitter `
+          --hidden-import=tree_sitter_languages `
+          --hidden-import=anthropic `
+          --hidden-import=openai `
+          --hidden-import=google.genai `
+          --hidden-import=ollama `
+          --hidden-import=click `
+          --hidden-import=asyncclick `
+          --hidden-import=rich `
+          --hidden-import=textual `
+          --hidden-import=pydantic `
+          --hidden-import=yaml `
+          --hidden-import=dotenv `
+          --collect-all tree_sitter_languages `
+          --copy-metadata trae-agent `
+          --copy-metadata openai `
+          --copy-metadata anthropic `
+          --copy-metadata google-genai `
+          trae_agent/cli.py
+
+    - name: Prepare artifact directory
+      run: |
+        New-Item -ItemType Directory -Path artifact -Force
+        Copy-Item dist\trae-cli.exe artifact\
+        Copy-Item trae_config.yaml.example artifact\
+
+    - name: Create README for artifact
+      run: |
+        @"
+        # Trae-Agent Windows Executable
+
+        ## Usage
+
+        1. Copy `trae_config.yaml.example` to `trae_config.yaml`
+        2. Edit `trae_config.yaml` with your API keys and settings
+        3. Run the executable:
+           ```
+           .\trae-cli.exe run "your task here" --working-dir "path\to\your\project"
+           ```
+
+        ## Command Line Options
+
+        The executable supports the following command-line options to override config file settings:
+
+        - `--model-base-url <URL>`: Custom API base URL
+        - `--api-key <KEY>`: API key for authentication
+        - `--model <MODEL>`: Model name to use
+        - `--provider <PROVIDER>`: LLM provider (e.g., anthropic, openai)
+        - `--config-file <FILE>`: Path to configuration file (default: trae_config.yaml)
+
+        ### Example with custom settings:
+
+        ```
+        .\trae-cli.exe run "your task" `
+          --model-base-url "https://api.example.com" `
+          --api-key "your-api-key" `
+          --model "claude-3-opus" `
+          --working-dir "C:\path\to\project"
+        ```
+
+        ## Available Commands
+
+        - `run`: Execute a task
+        - `interactive`: Start interactive mode
+        - `show-config`: Display current configuration
+        - `tools`: List available tools
+
+        For more information, run:
+        ```
+        .\trae-cli.exe --help
+        ```
+        "@ | Out-File -FilePath artifact\README.md -Encoding UTF8
+
+    - name: Create compressed archive
+      run: |
+        Compress-Archive -Path artifact\* -DestinationPath trae-cli-windows.zip
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: trae-cli-windows
+        path: trae-cli-windows.zip
+        retention-days: 90
+
+    - name: Upload to Release (if tag)
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: trae-cli-windows.zip
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
