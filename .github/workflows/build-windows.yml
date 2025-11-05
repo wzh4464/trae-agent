@@ -2,6 +2,7 @@ name: Build Windows Executable
 
 on:
   workflow_dispatch:  # Manual trigger
+    inputs: {}
   push:
     tags:
       - 'v*'  # Optional: trigger on version tags
