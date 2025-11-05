@@ -33,8 +33,7 @@ jobs:
 
     - name: Build executable with PyInstaller
       run: |
-        .venv\Scripts\activate
-        pyinstaller --name trae-cli `
+        .venv\Scripts\pyinstaller.exe --name trae-cli `
           --onefile `
           --hidden-import=jsonpath_ng `
           --hidden-import=jsonpath_ng.ext `
